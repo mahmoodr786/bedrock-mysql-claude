@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Using AWS Bedrock to Query a MySQL Database | Part 2 Prompt and Interface Improvement</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.4.1/dist/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+        <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css" crossorigin="anonymous">
+        
+        <style>
+            body {
+              font-size: .875rem;
+            }
+            
+            .feather {
+              width: 16px;
+              height: 16px;
+              vertical-align: text-bottom;
+            }
+            
+            /*
+             * Sidebar
+             */
+            
+            .sidebar {
+              position: fixed;
+              top: 0;
+              bottom: 0;
+              left: 0;
+              z-index: 100; /* Behind the navbar */
+              padding: 0;
+              box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            }
+            
+            .sidebar-sticky {
+              position: -webkit-sticky;
+              position: sticky;
+              top: 48px; /* Height of navbar */
+              height: calc(100vh - 48px);
+              padding-top: .5rem;
+              overflow-x: hidden;
+              overflow-y: auto; /* Scrollable contents if viewport is shorter than content. */
+            }
+            
+            .sidebar .nav-link {
+              font-weight: 500;
+              color: #333;
+            }
+            
+            .sidebar .nav-link .feather {
+              margin-right: 4px;
+              color: #999;
+            }
+            
+            .sidebar .nav-link.active {
+              color: #007bff;
+            }
+            
+            .sidebar .nav-link:hover .feather,
+            .sidebar .nav-link.active .feather {
+              color: inherit;
+            }
+            
+            .sidebar-heading {
+              font-size: .75rem;
+              text-transform: uppercase;
+            }
+            
+            /*
+             * Navbar
+             */
+            
+            .navbar-brand {
+              padding-top: .75rem;
+              padding-bottom: .75rem;
+              font-size: 1rem;
+              background-color: rgba(0, 0, 0, .25);
+              box-shadow: inset -1px 0 0 rgba(0, 0, 0, .25);
+            }
+            
+            .navbar .form-control {
+              padding: .75rem 1rem;
+              border-width: 0;
+              border-radius: 0;
+            }
+            
+            .form-control-dark {
+              color: #fff;
+              background-color: rgba(255, 255, 255, .1);
+              border-color: rgba(255, 255, 255, .1);
+            }
+            
+            .form-control-dark:focus {
+              border-color: transparent;
+              box-shadow: 0 0 0 3px rgba(255, 255, 255, .25);
+            }
+            
+            /*
+             * Utilities
+             */
+            
+            .border-top { border-top: 1px solid #e5e5e5; }
+            .border-bottom { border-bottom: 1px solid #e5e5e5; }
+            .clear{clear:both}
+            .chatbox{
+                height: 120px;
+                display: block;
+            }
+            .send-btn{
+                clear: both;
+                margin-top: -80px;
+            }
+            .textarea{width: 95%; height:100px}
+            .chat-display{display: block; overflow: scroll; height: calc(100vh - 250px); padding: 20px;}
+            .alert{
+                width: 90%;
+                clear: both;
+            }
+            .human{
+                float: right;
+            }
+            .dt-container{
+              margin-top: 20px;
+              background: #fff;
+              padding: 10px;
+            }
+            question{
+              color: red;
+            }
+            query{
+              color: blueviolet;
+            }
+        </style>
+    </head>
+    <body>
+        <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0">
+          <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="#">Bedrock MySQL</a>
+          <!--<input class="form-control form-control-dark w-100" type="text" placeholder="Search" aria-label="Search">-->
+          <ul class="navbar-nav px-3">
+            <li class="nav-item text-nowrap">
+              <a class="nav-link new-chat" href="#">New Chat</a>
+            </li>
+          </ul>
+        </nav>
+    <div class="container-fluid">
+      <div class="row">
+        <nav class="col-md-2 d-none d-md-block bg-light sidebar">
+          <div class="sidebar-sticky">
+            <ul class="nav flex-column">
+              <li class="nav-item chat-nav">
+                <a class="nav-link new-chat chat-item" href="#">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  <span>New Chat</span>
+                </a>
+              </li>
+            </ul>
+
+          </div>
+        </nav>
+
+        <main role="main" class="col-md-9 ml-sm-auto col-lg-10 pt-3 px-4">
+          <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pb-2 mb-3 border-bottom">
+            <h1 class="h2 title">Chat</h1>
+            <div class="btn-toolbar mb-2 mb-md-0">
+              <div class="btn-group mr-2">
+                <button class="btn btn-sm btn-danger delete-chat">Delete Chat</button>
+              </div>
+            </div>
+          </div>
+          <div class="chat-display">
+            <div class="alert alert-primary c-human human d-none" role="alert">
+                hello!
+            </div>
+            <div class="alert alert-secondary c-assistant assistant d-none" role="alert">
+                hello how are you
+            </div>
+          </div>
+          <dev class="chatbox">
+              <textarea name="chat" class="textarea chat-prompt"></textarea>
+              <button class="btn btn-success send-btn">Send</button>
+              <br class="clear">
+          </dev>
+        </main>
+      </div>
+    </div>
+    
+        <script src="https://code.jquery.com/jquery.min.js" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.4.1/dist/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+        <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+        <script>
+            function genID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
+            $(function(){
+                // Update lambda or server URL here
+                chatURL = "https://jv32qz2u44ozp5wtxogwepexzi0vevjp.lambda-url.us-east-1.on.aws/chat"
+                
+                const chatsItem = localStorage.getItem('chats');
+                if(chatsItem){
+                    const chats = JSON.parse(chatsItem);
+                    for (const chatid in chats) {
+                        const chatInfo = chats[chatid];
+                        
+                        chatNav = $('.chat-item').clone();
+                        chatNav.find('span').text(chatInfo.title);
+                        chatNav.attr('data-id', chatid);
+                        chatNav.removeClass('new-chat');
+                        chatNav.removeClass('chat-item');
+                        chatNav.addClass('load-chat');
+                        $('.chat-nav').append(chatNav);
+                    }
+                    setTimeout(function(){
+                        $('.chat-nav').find('.load-chat').first().click();
+                    }, 1000)
+                }else{
+                    id = genID()
+                    const chats = {
+                        id: {
+                            title: 'Test Chat',
+                            chats: [
+                                {
+                                  "role": "user",
+                                  "content": [
+                                      {"text": "Hello"}, 
+                                  ],
+                                },
+                                {
+                                  "role": "assistant",
+                                  "content": [
+                                      {"text": "Hi there!"},
+                                  ],
+                                  "results": [
+                                    {
+                                      "customer_id": 1,
+                                      "first_name": "john",
+                                      "last_name": "doe",
+                                      "email": "john.doe@example.com"
+                                    },
+                                    {
+                                      "customer_id": 2,
+                                      "first_name": "jane",
+                                      "last_name": "smith",
+                                      "email": "jane.smith@example.com"
+                                    }
+                                  ]
+                                }
+                            ]
+                        }
+                    };
+                    localStorage.setItem('chats', JSON.stringify(chats));
+                }
+                $('.load-chat').click(function(){
+
+                    $('.load-chat').removeClass('active');
+                    const chatsItem = localStorage.getItem('chats');
+                    const chats = JSON.parse(chatsItem);
+                    $('.loaded').remove();
+                    $(this).addClass('active');
+                    chatID = $(this).data('id');
+                    $('.chat-display').attr('data-id', chatID)
+                    chatItems = chats[chatID]
+                    chatItems.title
+                    $('.title').text(chatItems.title)
+                    chatItems.chats.forEach((message, index) => {
+                        hchat = $('.c-human').clone();
+                        achat = $('.c-assistant').clone();
+                        hchat.removeClass('d-none');
+                        achat.removeClass('d-none');
+                        hchat.removeClass('c-human');
+                        achat.removeClass('c-assistant');
+                        hchat.addClass('loaded');
+                        achat.addClass('loaded');
+
+                        if(message.role == "user"){
+                          hchat.html(message.content[0].text);
+                          $('.chat-display').append(hchat);
+                        }else{
+                          content = message.content[0].text
+                          if(Array.isArray(message.results) && message.results.length > 0){
+                            let tableUUID = genID()
+                            content = content + '<table id="data-table'+tableUUID+'"></table>';
+                            let tableColumns = Object.keys(message.results[0]).map(key => {
+                                return { 
+                                  data: key,
+                                  title: key
+                                 };
+                            });
+                            console.log(tableColumns)
+                            console.log(message.results)
+                            setTimeout(() => {
+                              $('#data-table' + tableUUID).DataTable( {
+                                  data: message.results,
+                                  columns: tableColumns
+                              } );
+                            }, 1000);
+                          }
+                          achat.html(content);
+                          $('.chat-display').append(achat);
+                        }
+                    });
+                });
+                $('.send-btn').click(function(){
+                    chatID = $('.chat-display').attr('data-id')
+                    const chatsItem = localStorage.getItem('chats');
+                    chats = JSON.parse(chatsItem);
+                    chatItems = chats[chatID]
+
+                    prompt = $('.chat-prompt').val();
+                    $('.chat-prompt').val('');
+
+                    hchat = $('.c-human').clone();
+                    achat = $('.c-assistant').clone();
+                    hchat.removeClass('d-none');
+                    achat.removeClass('d-none');
+                    hchat.removeClass('c-human');
+                    achat.removeClass('c-assistant');
+                    hchat.addClass('loaded');
+                    achat.addClass('loaded');
+
+                    hchat.html(prompt);
+                    $('.chat-display').append(hchat);
+                    
+                    data = chatItems.chats
+                    data.push({"role": "user","content": [{"text": prompt}]})
+
+                    //remove the below map if you want to send results back to server
+                    data = data.map(item => {
+                        const { results, ...rest } = item;
+                        return rest;
+                    });
+                    const response =  fetch(chatURL, {
+                        method: 'POST', 
+                        headers: {
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify(data) 
+                    }).then(response => {
+                            if (!response.ok) {
+                                alert(`HTTP error! status: ${response.status}`)
+                            }
+                            return response.json();
+                    }).then(result => {
+                        chats[chatID].chats.push(result);
+                        localStorage.setItem('chats', JSON.stringify(chats));
+                        content = result.content[0].text;
+
+                        if(Array.isArray(result.results) && result.results.length > 0){
+                          let tableUUID = genID()
+                          content = content + '<table id="data-table'+tableUUID+'"></table>';
+                          let tableColumns = Object.keys(result.results[0]).map(key => {
+                            return { 
+                              data: key,
+                              title: key
+                            };
+                          });
+                          setTimeout(() => {
+                            $('#data-table' + tableUUID).DataTable( {
+                                data: result.results,
+                                columns: tableColumns
+                            } );
+                          }, 1000);
+                        }
+
+                        achat.html(content);
+                        $('.chat-display').append(achat);
+                        $('.chat-display').animate({ scrollTop:  $('.chat-display')[0].scrollHeight }, 1000);
+                    })
+                });
+                $('.new-chat').click(function(){
+                    title = prompt('Please enter the title for your chat')
+                    if(title !== null){
+                        const chatsItem = localStorage.getItem('chats');
+                        chats = JSON.parse(chatsItem);
+                        id = genID()
+                        chats[id] = {
+                            title: title,
+                            chats: [
+                            ]
+                        }
+                        localStorage.setItem('chats', JSON.stringify(chats));
+                        window.location.reload()
+                    }
+                });
+                $('.delete-chat').click(function(){
+                    chatID = $('.chat-display').attr('data-id')
+                    const chatsItem = localStorage.getItem('chats');
+                    chats = JSON.parse(chatsItem);
+                    chat = chats[chatID]
+
+                    if(confirm('Are you sure you want to delete: ' + chat['title'])){
+                        
+                        delete chats[chatID]
+                        localStorage.setItem('chats', JSON.stringify(chats));
+                        window.location.reload()
+                    }
+                });
+            })
+        </script>
+    </body>
+</html>
